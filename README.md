@@ -16,7 +16,7 @@ background daemon or telemetry service.
 
 - Adaptive bar widget that can show CPU, memory, GPU, or both
 - Expandable dashboard for CPU, RAM, temperature, load, and uptime
-- GPU utilization, temperature, and VRAM for the discrete adapter
+- GPU utilization, temperature, and VRAM, with per-sensor vendor fallbacks
 - Two-minute CPU, memory, and GPU history with per-core utilization
 - Mirrored network throughput history on a shared scale
 - Automatic disk discovery with live read and write rates
@@ -72,12 +72,32 @@ Temperature is shown when a supported package sensor is available. Disk
 activity aggregates physical devices and ignores loop, RAM, zram, floppy, and
 optical devices.
 
-The GPU section appears only when a card publishes `gpu_busy_percent`, which
-today means an `amdgpu` adapter. On hybrid systems the card reporting the most
-video memory is chosen, which selects the discrete GPU over integrated
-graphics without hard-coding device identifiers. Drivers that do not export
-the counter are skipped rather than reported as idle, so the panel keeps its
-original three-tile layout on those machines.
+Each GPU tile is gated on its own sensor, because vendors expose different
+subsets:
+
+| Driver | Utilization | Temperature | VRAM |
+| --- | --- | --- | --- |
+| `amdgpu` | yes | yes | yes |
+| `i915` / `xe` (Intel, including Arc) | no | yes | no |
+| `nouveau` | no | yes | no |
+| NVIDIA proprietary | no | no | no |
+
+Only `amdgpu` publishes a device-wide utilization counter in sysfs. Intel
+exposes utilization through the PMU or per-client `fdinfo`, both of which need
+either elevated capabilities or per-process accounting, and the NVIDIA
+proprietary driver requires NVML. Reading those would mean spawning a helper
+process on every sample, which this plugin deliberately avoids, so a card that
+cannot be read is left out rather than reported as idle.
+
+A card with a temperature sensor but no utilization counter still gets a
+section, showing just the tiles it can fill. When nothing is readable, the
+panel keeps its original layout untouched.
+
+Cards are ranked so one publishing utilization wins outright, then by video
+memory, which picks the discrete adapter on hybrid systems without hard-coding
+device identifiers. Two temperature-only cards in one machine — an Intel iGPU
+next to an Arc card, for instance — cannot currently be told apart, and the
+first is used.
 
 ## Configure
 
@@ -125,6 +145,7 @@ Validate the manifest and run the model tests from a checkout:
 ```sh
 omarchy plugin validate .
 node --test tests/model.test.js
+bash tests/discovery.test.sh
 ```
 
 Changes inside an installed plugin directory normally hot-reload. Restart the

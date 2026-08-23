@@ -127,7 +127,15 @@ Panel {
     return Math.max(0, Math.min(100, (metrics.cpuTemperature - temperatureFloor) * 100 / span))
   }
 
-  readonly property bool hasGpu: metrics.gpuPercent >= 0 || metrics.gpuTemperature >= 0
+  // Vendors expose different subsets: amdgpu publishes utilisation, memory and
+  // temperature; i915/xe and nouveau publish temperature alone. Each tile is
+  // gated on its own sensor so a temperature-only card still gets a section
+  // instead of a row of em dashes.
+  readonly property bool hasGpuUsage: metrics.gpuPercent >= 0
+  readonly property bool hasGpuTemperature: metrics.gpuTemperature >= 0
+  readonly property bool hasGpuVram: metrics.gpuVramTotal > 0 && metrics.gpuVramUsed >= 0
+  readonly property bool hasGpu: hasGpuUsage || hasGpuTemperature
+  readonly property int gpuTileCount: (hasGpuUsage ? 1 : 0) + (hasGpuTemperature ? 1 : 0) + (hasGpuVram ? 1 : 0)
 
   function gpuTemperatureText() {
     return metrics.gpuTemperature >= 0 ? Math.round(metrics.gpuTemperature) + "°C" : "—"
@@ -145,6 +153,13 @@ Panel {
     if (metrics.gpuTemperature < 0) return -1
     var span = temperatureCeiling - temperatureFloor
     return Math.max(0, Math.min(100, (metrics.gpuTemperature - temperatureFloor) * 100 / span))
+  }
+
+  // Row skips invisible children, so the divisor is the number of tiles that
+  // this card can actually fill.
+  function gpuTileWidth(rowWidth, spacing) {
+    var count = Math.max(1, gpuTileCount)
+    return (rowWidth - spacing * (count - 1)) / count
   }
 
   function gpuVramPercent() {
@@ -219,8 +234,13 @@ Panel {
     ]
     // Skipped entirely on machines without a utilisation-reporting GPU, so
     // the tooltip never grows a row of em dashes.
-    if (hasGpu)
-      lines.push("GPU " + percent(metrics.gpuPercent) + " · " + gpuTemperatureText() + " · VRAM " + gpuVramDetail())
+    if (hasGpu) {
+      var gpu = []
+      if (hasGpuUsage) gpu.push("GPU " + percent(metrics.gpuPercent))
+      if (hasGpuTemperature) gpu.push((hasGpuUsage ? "" : "GPU ") + gpuTemperatureText())
+      if (hasGpuVram) gpu.push("VRAM " + gpuVramDetail())
+      lines.push(gpu.join(" · "))
+    }
     lines.push("Load " + loadText() + (interfaceName !== "" ? " · " + interfaceName : ""))
     lines.push("Net ↓ " + formatRate(metrics.networkDownBps) + " ↑ " + formatRate(metrics.networkUpBps))
     lines.push("Disk R " + formatRate(metrics.diskReadBps) + " · W " + formatRate(metrics.diskWriteBps))
@@ -229,7 +249,7 @@ Panel {
   }
 
   function cycleBarMode() {
-    var modes = hasGpu ? ["Adaptive", "CPU", "Memory", "GPU", "Both"] : ["Adaptive", "CPU", "Memory", "Both"]
+    var modes = hasGpuUsage ? ["Adaptive", "CPU", "Memory", "GPU", "Both"] : ["Adaptive", "CPU", "Memory", "Both"]
     var index = modes.indexOf(barMode)
     var next = modes[(index + 1) % modes.length]
     settings = Object.assign({}, settings, { barMode: next })
@@ -430,17 +450,19 @@ Panel {
             visible: root.hasGpu
 
             StatTile {
-              width: (parent.width - parent.spacing * 2) / 3
+              visible: root.hasGpuUsage
+              width: root.gpuTileWidth(parent.width, parent.spacing)
               title: "GPU"
               value: root.percent(metrics.gpuPercent)
-              detail: metrics.gpuVramTotal > 0 ? root.formatBytes(metrics.gpuVramTotal) + " VRAM" : "—"
+              detail: root.hasGpuVram ? root.formatBytes(metrics.gpuVramTotal) + " VRAM" : "—"
               meter: metrics.gpuPercent
               meterColor: root.levelColor(metrics.gpuPercent, root.warningThreshold, root.criticalThreshold)
               alarming: metrics.gpuPercent >= root.criticalThreshold
             }
 
             StatTile {
-              width: (parent.width - parent.spacing * 2) / 3
+              visible: root.hasGpuTemperature
+              width: root.gpuTileWidth(parent.width, parent.spacing)
               title: "GPU TEMP"
               value: root.gpuTemperatureText()
               detail: root.gpuTemperatureDetail()
@@ -450,7 +472,8 @@ Panel {
             }
 
             StatTile {
-              width: (parent.width - parent.spacing * 2) / 3
+              visible: root.hasGpuVram
+              width: root.gpuTileWidth(parent.width, parent.spacing)
               title: "VRAM"
               value: root.percent(root.gpuVramPercent())
               detail: root.gpuVramDetail()
@@ -468,7 +491,7 @@ Panel {
             spacing: Style.space(6)
 
             SectionHeading {
-              title: root.hasGpu ? "CPU, MEMORY & GPU" : "CPU & MEMORY"
+              title: root.hasGpuUsage ? "CPU, MEMORY & GPU" : "CPU & MEMORY"
               value: "2 MIN"
             }
 
@@ -498,7 +521,7 @@ Panel {
 
               Sparkline {
                 anchors.fill: parent
-                visible: root.hasGpu
+                visible: root.hasGpuUsage
                 points: metrics.gpuHistory
                 lineColor: root.warningColor
                 fillColor: "transparent"
@@ -523,7 +546,7 @@ Panel {
                 spacing: Style.space(8)
                 LegendDot { colorValue: root.accent; label: "CPU" }
                 LegendDot { colorValue: root.secondary; label: "RAM" }
-                LegendDot { visible: root.hasGpu; colorValue: root.warningColor; label: "GPU" }
+                LegendDot { visible: root.hasGpuUsage; colorValue: root.warningColor; label: "GPU" }
               }
             }
           }
