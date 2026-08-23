@@ -139,7 +139,14 @@ function parseDisk(raw, devices) {
 }
 
 function parseDiscovery(raw) {
-  var result = { cpuTempPath: "", devices: [] }
+  var result = {
+    cpuTempPath: "",
+    gpuBusyPath: "",
+    gpuTempPath: "",
+    gpuVramUsedPath: "",
+    gpuVramTotalPath: "",
+    devices: []
+  }
   var lines = String(raw || "").split("\n")
   for (var i = 0; i < lines.length; i++) {
     var separator = lines[i].indexOf("\t")
@@ -147,9 +154,31 @@ function parseDiscovery(raw) {
     var key = lines[i].slice(0, separator)
     var value = lines[i].slice(separator + 1).trim()
     if (key === "cpu_temp") result.cpuTempPath = value
+    else if (key === "gpu_busy") result.gpuBusyPath = value
+    else if (key === "gpu_temp") result.gpuTempPath = value
+    else if (key === "gpu_vram_used") result.gpuVramUsedPath = value
+    else if (key === "gpu_vram_total") result.gpuVramTotalPath = value
     else if (key === "disk" && value !== "") result.devices.push(value)
   }
   return result
+}
+
+// amdgpu publishes utilisation as a bare integer percentage. An unreadable or
+// negative value becomes -1 so the panel prints an em dash instead of "0%",
+// which would wrongly claim the GPU is idle.
+function parseGpuPercent(raw) {
+  var text = String(raw === undefined || raw === null ? "" : raw).trim()
+  if (text === "") return -1
+  var value = Number(text)
+  return isFinite(value) && value >= 0 ? clamp(value, 0, 100) : -1
+}
+
+// VRAM counters are plain byte totals; -1 marks "not published by this card".
+function parseByteCount(raw) {
+  var text = String(raw === undefined || raw === null ? "" : raw).trim()
+  if (text === "") return -1
+  var value = Number(text)
+  return isFinite(value) && value >= 0 ? value : -1
 }
 
 function parseFilesystem(raw) {
@@ -198,6 +227,8 @@ if (typeof module !== "undefined" && module.exports) {
     parseNetwork: parseNetwork,
     parseDisk: parseDisk,
     parseDiscovery: parseDiscovery,
+    parseGpuPercent: parseGpuPercent,
+    parseByteCount: parseByteCount,
     parseFilesystem: parseFilesystem,
     peakValue: peakValue,
     maximumPercent: maximumPercent,

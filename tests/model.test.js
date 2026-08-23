@@ -71,19 +71,59 @@ test("discovery parser maps sensor probe output into runtime paths", () => {
   ].join("\n")
   assert.deepEqual(Model.parseDiscovery(raw), {
     cpuTempPath: "/sys/class/hwmon/hwmon2/temp1_input",
+    gpuBusyPath: "",
+    gpuTempPath: "",
+    gpuVramUsedPath: "",
+    gpuVramTotalPath: "",
     devices: ["nvme0n1", "sda"]
   })
+})
+
+test("discovery parser captures gpu sensor paths alongside cpu and disks", () => {
+  const raw = [
+    "cpu_temp\t/sys/class/hwmon/hwmon3/temp1_input",
+    "disk\tnvme0n1",
+    "gpu_busy\t/sys/class/drm/card1/device/gpu_busy_percent",
+    "gpu_temp\t/sys/class/drm/card1/device/hwmon/hwmon1/temp1_input",
+    "gpu_vram_used\t/sys/class/drm/card1/device/mem_info_vram_used",
+    "gpu_vram_total\t/sys/class/drm/card1/device/mem_info_vram_total"
+  ].join("\n")
+  const parsed = Model.parseDiscovery(raw)
+  assert.equal(parsed.gpuBusyPath, "/sys/class/drm/card1/device/gpu_busy_percent")
+  assert.equal(parsed.gpuTempPath, "/sys/class/drm/card1/device/hwmon/hwmon1/temp1_input")
+  assert.equal(parsed.gpuVramTotalPath, "/sys/class/drm/card1/device/mem_info_vram_total")
+  assert.deepEqual(parsed.devices, ["nvme0n1"])
+})
+
+test("gpu percent parser clamps to the 0-100 band and rejects missing readings", () => {
+  assert.equal(Model.parseGpuPercent("6"), 6)
+  assert.equal(Model.parseGpuPercent("150"), 100)
+  // A blank sysfs read must not become 0%, which would claim an idle GPU.
+  assert.equal(Model.parseGpuPercent(""), -1)
+  assert.equal(Model.parseGpuPercent("   "), -1)
+  assert.equal(Model.parseGpuPercent(null), -1)
+  assert.equal(Model.parseGpuPercent("abc"), -1)
+  assert.equal(Model.parseGpuPercent("-3"), -1)
+})
+
+test("byte counter parser distinguishes zero from unavailable", () => {
+  assert.equal(Model.parseByteCount("17095983104"), 17095983104)
+  assert.equal(Model.parseByteCount("0"), 0)
+  assert.equal(Model.parseByteCount(""), -1)
+  assert.equal(Model.parseByteCount("nope"), -1)
 })
 
 test("manifest describes a public bar widget with configurable thresholds", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"))
   assert.equal(manifest.schemaVersion, 1)
   assert.equal(manifest.id, "harshith.system-monitor")
-  assert.equal(manifest.version, "1.0.1")
+  assert.equal(manifest.version, "1.1.0")
   assert.equal(manifest.license, "MIT")
   assert.equal(manifest.homepage, "https://github.com/Harshith292002/omarchy-system-monitor")
   assert.equal(manifest.barWidget.defaultSection, "right")
   assert.ok(manifest.barWidget.schema.some((entry) => entry.key === "warningPercent"))
+  const barMode = manifest.barWidget.schema.find((entry) => entry.key === "barMode")
+  assert.ok(barMode.options.includes("GPU"))
 })
 
 test("panel exposes bar cycling, btop launch, and live hostname title", () => {

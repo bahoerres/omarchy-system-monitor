@@ -28,6 +28,10 @@ Item {
   property real loadFifteen: -1
   property double uptimeSeconds: 0
   property real cpuTemperature: -1
+  property real gpuPercent: -1
+  property real gpuTemperature: -1
+  property double gpuVramUsed: -1
+  property double gpuVramTotal: -1
   property real networkDownBps: -1
   property real networkUpBps: -1
   property real diskReadBps: -1
@@ -38,12 +42,17 @@ Item {
   property string hostname: ""
   property string autoInterface: ""
   property string cpuTempPath: ""
+  property string gpuBusyPath: ""
+  property string gpuTempPath: ""
+  property string gpuVramUsedPath: ""
+  property string gpuVramTotalPath: ""
   property var diskDevices: []
   property double lastSampleMs: 0
   property double lastFilesystemRefreshMs: 0
 
   property var cpuHistory: []
   property var memoryHistory: []
+  property var gpuHistory: []
   property var networkDownHistory: []
   property var networkUpHistory: []
 
@@ -77,6 +86,11 @@ Item {
     networkFile.reload()
     diskFile.reload()
     if (cpuTempPath !== "") temperatureFile.reload()
+    if (gpuBusyPath !== "") gpuBusyFile.reload()
+    if (gpuTempPath !== "") gpuTemperatureFile.reload()
+    // VRAM only moves when the panel is open and a human is looking; polling
+    // it on the closed cadence buys nothing and costs two sysfs reads.
+    if (panelOpen && gpuVramUsedPath !== "") gpuVramUsedFile.reload()
 
     var now = Date.now()
     if (panelOpen && !filesystemProc.running && now - lastFilesystemRefreshMs >= 60000) {
@@ -250,6 +264,48 @@ Item {
   }
 
   FileView {
+    id: gpuBusyFile
+    path: root.gpuBusyPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      root.gpuPercent = Model.parseGpuPercent(text())
+      if (root.gpuPercent >= 0) root.gpuHistory = root.appendHistory(root.gpuHistory, Date.now(), root.gpuPercent)
+    }
+    onLoadFailed: root.gpuPercent = -1
+  }
+
+  FileView {
+    id: gpuTemperatureFile
+    path: root.gpuTempPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      var value = Number(String(text()).trim()) / 1000
+      root.gpuTemperature = isFinite(value) && value > 0 ? value : -1
+    }
+    onLoadFailed: root.gpuTemperature = -1
+  }
+
+  FileView {
+    id: gpuVramUsedFile
+    path: root.gpuVramUsedPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: root.gpuVramUsed = Model.parseByteCount(text())
+    onLoadFailed: root.gpuVramUsed = -1
+  }
+
+  FileView {
+    id: gpuVramTotalFile
+    path: root.gpuVramTotalPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: root.gpuVramTotal = Model.parseByteCount(text())
+    onLoadFailed: root.gpuVramTotal = -1
+  }
+
+  FileView {
     path: "/etc/hostname"
     watchChanges: true
     printErrors: false
@@ -265,9 +321,19 @@ Item {
       onStreamFinished: {
         var discovered = Model.parseDiscovery(text)
         root.cpuTempPath = discovered.cpuTempPath
+        root.gpuBusyPath = discovered.gpuBusyPath
+        root.gpuTempPath = discovered.gpuTempPath
+        root.gpuVramUsedPath = discovered.gpuVramUsedPath
+        root.gpuVramTotalPath = discovered.gpuVramTotalPath
         root.diskDevices = discovered.devices
         root.diskSnapshot = null
         if (root.cpuTempPath !== "") temperatureFile.reload()
+        if (root.gpuBusyPath !== "") gpuBusyFile.reload()
+        if (root.gpuTempPath !== "") gpuTemperatureFile.reload()
+        // Total VRAM is fixed for the life of the card, so read it once here
+        // rather than on every sample.
+        if (root.gpuVramTotalPath !== "") gpuVramTotalFile.reload()
+        if (root.gpuVramUsedPath !== "") gpuVramUsedFile.reload()
         diskFile.reload()
       }
     }

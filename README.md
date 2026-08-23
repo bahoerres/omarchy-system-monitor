@@ -14,9 +14,10 @@ background daemon or telemetry service.
 
 ## Highlights
 
-- Adaptive bar widget that can show CPU, memory, or both
+- Adaptive bar widget that can show CPU, memory, GPU, or both
 - Expandable dashboard for CPU, RAM, temperature, load, and uptime
-- Two-minute CPU and memory history with per-core utilization
+- GPU utilization, temperature, and VRAM for the discrete adapter
+- Two-minute CPU, memory, and GPU history with per-core utilization
 - Mirrored network throughput history on a shared scale
 - Automatic disk discovery with live read and write rates
 - Root filesystem and swap capacity meters
@@ -64,11 +65,19 @@ pressure. Warning and critical colors follow the active Omarchy theme.
 | Network throughput | `/proc/net/route`, `/proc/net/dev` |
 | Disk throughput | `/proc/diskstats` and `/sys/class/block` |
 | CPU temperature | `/sys/class/hwmon` (`coretemp`, `k10temp`, or `zenpower`) |
+| GPU load, temperature, and VRAM | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `hwmon`, `mem_info_vram_*`) |
 | Root capacity | `df` |
 
 Temperature is shown when a supported package sensor is available. Disk
 activity aggregates physical devices and ignores loop, RAM, zram, floppy, and
 optical devices.
+
+The GPU section appears only when a card publishes `gpu_busy_percent`, which
+today means an `amdgpu` adapter. On hybrid systems the card reporting the most
+video memory is chosen, which selects the discrete GPU over integrated
+graphics without hard-coding device identifiers. Drivers that do not export
+the counter are skipped rather than reported as idle, so the panel keeps its
+original three-tile layout on those machines.
 
 ## Configure
 

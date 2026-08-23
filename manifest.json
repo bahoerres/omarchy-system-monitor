@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "harshith.system-monitor",
   "name": "System Monitor",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "Harshith",
   "license": "MIT",
   "homepage": "https://github.com/Harshith292002/omarchy-system-monitor",
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "System Monitor",
-    "description": "CPU, memory, temperature, network, and disk activity.",
+    "description": "CPU, memory, GPU, temperature, network, and disk activity.",
     "category": "System",
     "aliases": ["sysmon", "system-stats"],
     "allowMultiple": false,
@@ -28,7 +28,7 @@
       "networkInterface": ""
     },
     "schema": [
-      { "key": "barMode", "type": "enum", "label": "Bar display", "options": ["Adaptive", "CPU", "Memory", "Both"], "defaultValue": "Adaptive" },
+      { "key": "barMode", "type": "enum", "label": "Bar display", "options": ["Adaptive", "CPU", "Memory", "GPU", "Both"], "defaultValue": "Adaptive" },
       { "key": "closedRefreshSec", "type": "integer", "label": "Closed refresh interval (seconds)", "min": 2, "max": 60, "step": 1, "defaultValue": 5 },
       { "key": "openRefreshSec", "type": "integer", "label": "Open refresh interval (seconds)", "min": 1, "max": 10, "step": 1, "defaultValue": 2 },
       { "key": "warningPercent", "type": "integer", "label": "Warning threshold", "min": 50, "max": 95, "step": 1, "defaultValue": 80 },
