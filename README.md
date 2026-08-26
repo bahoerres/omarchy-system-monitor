@@ -77,17 +77,20 @@ subsets:
 
 | Driver | Utilization | Temperature | VRAM |
 | --- | --- | --- | --- |
-| `amdgpu` | yes | yes | yes |
-| `i915` / `xe` (Intel, including Arc) | no | yes | no |
-| `nouveau` | no | yes | no |
+| `amdgpu` | yes | yes (`temp1_input`) | yes |
+| `i915` (Intel, pre-Arc) | no | yes, kernel 6.12+ (`temp1_input`) | no |
+| `xe` (Intel, Arc/Meteor Lake/Lunar Lake+) | no | yes, kernel 6.15+ (`temp2_input` — `xe` has no `temp1`) | no |
+| `nouveau` | no | yes (`temp1_input`) | no |
 | NVIDIA proprietary | no | no | no |
 
 Only `amdgpu` publishes a device-wide utilization counter in sysfs. Intel
 exposes utilization through the PMU or per-client `fdinfo`, both of which need
-either elevated capabilities or per-process accounting, and the NVIDIA
-proprietary driver requires NVML. Reading those would mean spawning a helper
-process on every sample, which this plugin deliberately avoids, so a card that
-cannot be read is left out rather than reported as idle.
+either elevated capabilities or per-process accounting. The NVIDIA proprietary
+driver doesn't register a `hwmon` device at all — not even for temperature —
+so every reading, utilization included, requires NVML (`nvidia-smi`). Reading
+any of these would mean spawning a helper process on every sample, which this
+plugin deliberately avoids, so a card that cannot be read is left out rather
+than reported as idle, and NVIDIA is unsupported outright.
 
 A card with a temperature sensor but no utilization counter still gets a
 section, showing just the tiles it can fill. When nothing is readable, the

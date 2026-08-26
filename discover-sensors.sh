@@ -42,11 +42,18 @@ done
 # GPU. Vendors expose different subsets, so each sensor is probed on its own
 # rather than gated behind one capability:
 #
-#   amdgpu        gpu_busy_percent, hwmon temperature, mem_info_vram_*
-#   i915 / xe     hwmon temperature only; no device-wide busy counter exists
-#                 in sysfs, utilisation needs the PMU or per-client fdinfo
-#   nouveau       hwmon temperature only
-#   NVIDIA prop.  nothing readable without NVML
+#   amdgpu        gpu_busy_percent, hwmon temperature (temp1_input), mem_info_vram_*
+#   i915          hwmon temperature only (temp1_input); no device-wide busy
+#                 counter exists in sysfs, utilisation needs the PMU or
+#                 per-client fdinfo
+#   xe            hwmon temperature only, but as temp2_input: xe's hwmon ABI
+#                 numbers package temp starting at 2, there is no temp1 (see
+#                 Documentation/ABI/testing/sysfs-driver-intel-xe-hwmon)
+#   nouveau       hwmon temperature only (temp1_input)
+#   NVIDIA prop.  nothing readable via sysfs at all, not even temperature —
+#                 every reading requires NVML (nvidia-smi), which means a
+#                 helper process. Deliberately left unsupported rather than
+#                 spawning one per sample.
 #
 # Cards are ranked so one publishing utilisation wins outright, then by video
 # memory. That keeps the discrete adapter on hybrid systems without hardcoding
@@ -71,10 +78,18 @@ for card in "$drm_root"/card*; do
   busy=""
   [[ -r "$device/gpu_busy_percent" ]] && busy="$device/gpu_busy_percent"
 
+  # temp1_input covers amdgpu, i915, and nouveau. xe has no temp1 at all —
+  # its package sensor starts numbering at temp2 — so that is checked as a
+  # fallback rather than a replacement.
   temp=""
   for hwmon in "$device"/hwmon/hwmon*; do
-    [[ -r "$hwmon/temp1_input" ]] || continue
-    temp="$hwmon/temp1_input"
+    if [[ -r "$hwmon/temp1_input" ]]; then
+      temp="$hwmon/temp1_input"
+    elif [[ -r "$hwmon/temp2_input" ]]; then
+      temp="$hwmon/temp2_input"
+    else
+      continue
+    fi
     break
   done
 

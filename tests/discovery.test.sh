@@ -53,6 +53,18 @@ check "intel" intel gpu_busy EMPTY
 check "intel" intel gpu_temp "card"
 check "intel" intel gpu_vram_total EMPTY
 
+echo "Intel xe (package temp is temp2_input, there is no temp1) - still found"
+mkdir -p "$work/xe/card0/device/hwmon/hwmon0"
+printf '48000\n' >"$work/xe/card0/device/hwmon/hwmon0/temp2_input"
+check "xe" xe gpu_busy EMPTY
+check "xe" xe gpu_temp "temp2_input"
+
+echo "Card with both temp1 and temp2 - temp1 wins (amdgpu edge sensor over the rest)"
+mkdir -p "$work/temp-precedence/card0/device/hwmon/hwmon0"
+printf '30000\n' >"$work/temp-precedence/card0/device/hwmon/hwmon0/temp1_input"
+printf '55000\n' >"$work/temp-precedence/card0/device/hwmon/hwmon0/temp2_input"
+check "temp-precedence" temp-precedence gpu_temp "temp1_input"
+
 echo "NVIDIA proprietary (nothing readable) - reports nothing at all"
 card nvidia card0 "" "" ""
 check "nvidia" nvidia gpu_busy EMPTY

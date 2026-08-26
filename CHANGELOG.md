@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.1.1 - 2026-08-26
+
+- Fix GPU temperature discovery on the `xe` driver (Intel Arc, Meteor Lake,
+  Lunar Lake and newer): its hwmon package sensor is `temp2_input`, not
+  `temp1_input`, so those cards previously reported no temperature at all
+- Document that NVIDIA's proprietary driver exposes no sysfs data whatsoever,
+  not even temperature, and is unsupported by design rather than by omission
+
 ## 1.0.1 - 2026-08-20
 
 - Render configuration-derived network interface names as plain text
