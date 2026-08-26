@@ -32,8 +32,8 @@ Panel {
   readonly property real warningThreshold: Math.min(Number(setting("warningPercent", 80)), criticalThreshold - 1)
   readonly property real criticalThreshold: Math.max(Number(setting("criticalPercent", 95)), 61)
   readonly property real pressure: Math.max(metrics.cpuPercent, metrics.memoryPercent)
-  readonly property bool warning: pressure >= warningThreshold || metrics.cpuTemperature >= 85
-  readonly property bool critical: pressure >= criticalThreshold || metrics.cpuTemperature >= 95
+  readonly property bool warning: pressure >= warningThreshold || metrics.cpuTemperature >= 85 || metrics.gpuTemperature >= 85
+  readonly property bool critical: pressure >= criticalThreshold || metrics.cpuTemperature >= 95 || metrics.gpuTemperature >= 95
 
   readonly property string heroGlyph: "󰻠"
 
@@ -127,6 +127,51 @@ Panel {
     return Math.max(0, Math.min(100, (metrics.cpuTemperature - temperatureFloor) * 100 / span))
   }
 
+  // Vendors expose different subsets: amdgpu publishes utilisation, memory and
+  // temperature; i915/xe and nouveau publish temperature alone. Each tile is
+  // gated on its own sensor so a temperature-only card still gets a section
+  // instead of a row of em dashes.
+  readonly property bool hasGpuUsage: metrics.gpuPercent >= 0
+  readonly property bool hasGpuTemperature: metrics.gpuTemperature >= 0
+  readonly property bool hasGpuVram: metrics.gpuVramTotal > 0 && metrics.gpuVramUsed >= 0
+  readonly property bool hasGpu: hasGpuUsage || hasGpuTemperature
+  readonly property int gpuTileCount: (hasGpuUsage ? 1 : 0) + (hasGpuTemperature ? 1 : 0) + (hasGpuVram ? 1 : 0)
+
+  function gpuTemperatureText() {
+    return metrics.gpuTemperature >= 0 ? Math.round(metrics.gpuTemperature) + "°C" : "—"
+  }
+
+  function gpuTemperatureDetail() {
+    if (metrics.gpuTemperature < 0) return "Unavailable"
+    if (metrics.gpuTemperature >= 85) return "Warm"
+    return "Normal"
+  }
+
+  // Same anchored scale as the CPU package sensor: a cold die drawn as a
+  // fraction of 100°C reads as half-loaded.
+  function gpuTemperatureMeter() {
+    if (metrics.gpuTemperature < 0) return -1
+    var span = temperatureCeiling - temperatureFloor
+    return Math.max(0, Math.min(100, (metrics.gpuTemperature - temperatureFloor) * 100 / span))
+  }
+
+  // Row skips invisible children, so the divisor is the number of tiles that
+  // this card can actually fill.
+  function gpuTileWidth(rowWidth, spacing) {
+    var count = Math.max(1, gpuTileCount)
+    return (rowWidth - spacing * (count - 1)) / count
+  }
+
+  function gpuVramPercent() {
+    if (metrics.gpuVramTotal <= 0 || metrics.gpuVramUsed < 0) return -1
+    return Math.max(0, Math.min(100, metrics.gpuVramUsed * 100 / metrics.gpuVramTotal))
+  }
+
+  function gpuVramDetail() {
+    if (metrics.gpuVramTotal <= 0 || metrics.gpuVramUsed < 0) return "—"
+    return formatPair(metrics.gpuVramUsed, metrics.gpuVramTotal)
+  }
+
   // nvme0n1 → nvme0, mmcblk0 → mmc0; sda and friends are already short.
   function shortDiskName(name) {
     var text = String(name || "")
@@ -164,11 +209,13 @@ Panel {
     if (button.vertical) {
       var value = barMode === "CPU" ? metrics.cpuPercent
         : barMode === "Memory" ? metrics.memoryPercent
+        : barMode === "GPU" ? metrics.gpuPercent
         : Math.max(metrics.cpuPercent, metrics.memoryPercent)
       return isFinite(value) && value >= 0 ? String(Math.round(value)) : "—"
     }
     if (barMode === "CPU") return "CPU " + padPercent(metrics.cpuPercent)
     if (barMode === "Memory") return "RAM " + padPercent(metrics.memoryPercent)
+    if (barMode === "GPU") return "GPU " + padPercent(metrics.gpuPercent)
     if (barMode === "Both")
       return "C " + padPercent(metrics.cpuPercent) + " M " + padPercent(metrics.memoryPercent)
     // Adaptive: whichever metric is under more pressure, named so the number
@@ -182,17 +229,27 @@ Panel {
     // WidgetButton's shared tooltip only accepts a string and renders it with
     // Text.AutoText, so neutralize markup before handing it configuration.
     var interfaceName = Model.escapeMarkup(metrics.activeInterface)
-    return [
-      "CPU " + percent(metrics.cpuPercent) + " · RAM " + percent(metrics.memoryPercent) + " · " + temperatureText(),
-      "Load " + loadText() + (interfaceName !== "" ? " · " + interfaceName : ""),
-      "Net ↓ " + formatRate(metrics.networkDownBps) + " ↑ " + formatRate(metrics.networkUpBps),
-      "Disk R " + formatRate(metrics.diskReadBps) + " · W " + formatRate(metrics.diskWriteBps),
-      "Right-click cycles display · Middle-click opens btop"
-    ].join("\n")
+    var lines = [
+      "CPU " + percent(metrics.cpuPercent) + " · RAM " + percent(metrics.memoryPercent) + " · " + temperatureText()
+    ]
+    // Skipped entirely on machines without a utilisation-reporting GPU, so
+    // the tooltip never grows a row of em dashes.
+    if (hasGpu) {
+      var gpu = []
+      if (hasGpuUsage) gpu.push("GPU " + percent(metrics.gpuPercent))
+      if (hasGpuTemperature) gpu.push((hasGpuUsage ? "" : "GPU ") + gpuTemperatureText())
+      if (hasGpuVram) gpu.push("VRAM " + gpuVramDetail())
+      lines.push(gpu.join(" · "))
+    }
+    lines.push("Load " + loadText() + (interfaceName !== "" ? " · " + interfaceName : ""))
+    lines.push("Net ↓ " + formatRate(metrics.networkDownBps) + " ↑ " + formatRate(metrics.networkUpBps))
+    lines.push("Disk R " + formatRate(metrics.diskReadBps) + " · W " + formatRate(metrics.diskWriteBps))
+    lines.push("Right-click cycles display · Middle-click opens btop")
+    return lines.join("\n")
   }
 
   function cycleBarMode() {
-    var modes = ["Adaptive", "CPU", "Memory", "Both"]
+    var modes = hasGpuUsage ? ["Adaptive", "CPU", "Memory", "GPU", "Both"] : ["Adaptive", "CPU", "Memory", "Both"]
     var index = modes.indexOf(barMode)
     var next = modes[(index + 1) % modes.length]
     settings = Object.assign({}, settings, { barMode: next })
@@ -384,6 +441,48 @@ Panel {
             }
           }
 
+          // ---------- GPU ----------
+          // Hidden outright when no card publishes utilisation, so machines
+          // without one keep the original three-tile layout.
+          Row {
+            width: parent.width
+            spacing: Style.space(8)
+            visible: root.hasGpu
+
+            StatTile {
+              visible: root.hasGpuUsage
+              width: root.gpuTileWidth(parent.width, parent.spacing)
+              title: "GPU"
+              value: root.percent(metrics.gpuPercent)
+              detail: root.hasGpuVram ? root.formatBytes(metrics.gpuVramTotal) + " VRAM" : "—"
+              meter: metrics.gpuPercent
+              meterColor: root.levelColor(metrics.gpuPercent, root.warningThreshold, root.criticalThreshold)
+              alarming: metrics.gpuPercent >= root.criticalThreshold
+            }
+
+            StatTile {
+              visible: root.hasGpuTemperature
+              width: root.gpuTileWidth(parent.width, parent.spacing)
+              title: "GPU TEMP"
+              value: root.gpuTemperatureText()
+              detail: root.gpuTemperatureDetail()
+              meter: root.gpuTemperatureMeter()
+              meterColor: root.levelColor(metrics.gpuTemperature, 85, 95)
+              alarming: metrics.gpuTemperature >= 95
+            }
+
+            StatTile {
+              visible: root.hasGpuVram
+              width: root.gpuTileWidth(parent.width, parent.spacing)
+              title: "VRAM"
+              value: root.percent(root.gpuVramPercent())
+              detail: root.gpuVramDetail()
+              meter: root.gpuVramPercent()
+              meterColor: root.levelColor(root.gpuVramPercent(), root.warningThreshold, root.criticalThreshold)
+              alarming: root.gpuVramPercent() >= root.criticalThreshold
+            }
+          }
+
           PanelSeparator { foreground: root.foreground }
 
           // ---------- CPU and memory history ----------
@@ -392,7 +491,7 @@ Panel {
             spacing: Style.space(6)
 
             SectionHeading {
-              title: "CPU & MEMORY"
+              title: root.hasGpuUsage ? "CPU, MEMORY & GPU" : "CPU & MEMORY"
               value: "2 MIN"
             }
 
@@ -420,6 +519,16 @@ Panel {
                 fixedMaximum: 100
               }
 
+              Sparkline {
+                anchors.fill: parent
+                visible: root.hasGpuUsage
+                points: metrics.gpuHistory
+                lineColor: root.warningColor
+                fillColor: "transparent"
+                lineWidth: 1.2
+                fixedMaximum: 100
+              }
+
               // The scale is pinned at 100%, so say so — otherwise an idle
               // machine just looks like an empty box.
               Text {
@@ -437,6 +546,7 @@ Panel {
                 spacing: Style.space(8)
                 LegendDot { colorValue: root.accent; label: "CPU" }
                 LegendDot { colorValue: root.secondary; label: "RAM" }
+                LegendDot { visible: root.hasGpuUsage; colorValue: root.warningColor; label: "GPU" }
               }
             }
           }

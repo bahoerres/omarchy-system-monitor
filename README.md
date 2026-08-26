@@ -14,9 +14,10 @@ background daemon or telemetry service.
 
 ## Highlights
 
-- Adaptive bar widget that can show CPU, memory, or both
+- Adaptive bar widget that can show CPU, memory, GPU, or both
 - Expandable dashboard for CPU, RAM, temperature, load, and uptime
-- Two-minute CPU and memory history with per-core utilization
+- GPU utilization, temperature, and VRAM, with per-sensor vendor fallbacks
+- Two-minute CPU, memory, and GPU history with per-core utilization
 - Mirrored network throughput history on a shared scale
 - Automatic disk discovery with live read and write rates
 - Root filesystem and swap capacity meters
@@ -64,11 +65,39 @@ pressure. Warning and critical colors follow the active Omarchy theme.
 | Network throughput | `/proc/net/route`, `/proc/net/dev` |
 | Disk throughput | `/proc/diskstats` and `/sys/class/block` |
 | CPU temperature | `/sys/class/hwmon` (`coretemp`, `k10temp`, or `zenpower`) |
+| GPU load, temperature, and VRAM | `/sys/class/drm/card*/device` (`gpu_busy_percent`, `hwmon`, `mem_info_vram_*`) |
 | Root capacity | `df` |
 
 Temperature is shown when a supported package sensor is available. Disk
 activity aggregates physical devices and ignores loop, RAM, zram, floppy, and
 optical devices.
+
+Each GPU tile is gated on its own sensor, because vendors expose different
+subsets:
+
+| Driver | Utilization | Temperature | VRAM |
+| --- | --- | --- | --- |
+| `amdgpu` | yes | yes | yes |
+| `i915` / `xe` (Intel, including Arc) | no | yes | no |
+| `nouveau` | no | yes | no |
+| NVIDIA proprietary | no | no | no |
+
+Only `amdgpu` publishes a device-wide utilization counter in sysfs. Intel
+exposes utilization through the PMU or per-client `fdinfo`, both of which need
+either elevated capabilities or per-process accounting, and the NVIDIA
+proprietary driver requires NVML. Reading those would mean spawning a helper
+process on every sample, which this plugin deliberately avoids, so a card that
+cannot be read is left out rather than reported as idle.
+
+A card with a temperature sensor but no utilization counter still gets a
+section, showing just the tiles it can fill. When nothing is readable, the
+panel keeps its original layout untouched.
+
+Cards are ranked so one publishing utilization wins outright, then by video
+memory, which picks the discrete adapter on hybrid systems without hard-coding
+device identifiers. Two temperature-only cards in one machine — an Intel iGPU
+next to an Arc card, for instance — cannot currently be told apart, and the
+first is used.
 
 ## Configure
 
@@ -116,6 +145,7 @@ Validate the manifest and run the model tests from a checkout:
 ```sh
 omarchy plugin validate .
 node --test tests/model.test.js
+bash tests/discovery.test.sh
 ```
 
 Changes inside an installed plugin directory normally hot-reload. Restart the
