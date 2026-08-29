@@ -29,6 +29,9 @@ Panel {
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   readonly property string barMode: String(setting("barMode", "Adaptive"))
+  // Icon mode keeps the bar quiet: the plugin glyph alone, still tinted at
+  // warning/critical pressure, tooltip and dashboard unchanged.
+  readonly property bool iconOnly: barMode === "Icon"
   readonly property real warningThreshold: Math.min(Number(setting("warningPercent", 80)), criticalThreshold - 1)
   readonly property real criticalThreshold: Math.max(Number(setting("criticalPercent", 95)), 61)
   readonly property real pressure: Math.max(metrics.cpuPercent, metrics.memoryPercent)
@@ -249,7 +252,7 @@ Panel {
   }
 
   function cycleBarMode() {
-    var modes = hasGpuUsage ? ["Adaptive", "CPU", "Memory", "GPU", "Both"] : ["Adaptive", "CPU", "Memory", "Both"]
+    var modes = hasGpuUsage ? ["Adaptive", "CPU", "Memory", "GPU", "Both", "Icon"] : ["Adaptive", "CPU", "Memory", "Both", "Icon"]
     var index = modes.indexOf(barMode)
     var next = modes[(index + 1) % modes.length]
     settings = Object.assign({}, settings, { barMode: next })
@@ -314,9 +317,16 @@ Panel {
     function refresh(): string { metrics.sample(); return "ok" }
   }
 
+  function barPressed(buttonCode) {
+    if (buttonCode === Qt.RightButton) cycleBarMode()
+    else if (buttonCode === Qt.MiddleButton) launchBtop()
+    else toggle()
+  }
+
   WidgetButton {
     id: button
     anchors.fill: parent
+    visible: !root.iconOnly
     bar: root.bar
     text: root.barLabel()
     fontSize: Style.font.caption
@@ -324,16 +334,24 @@ Panel {
     active: root.warning || root.critical
     activeColor: root.critical ? root.urgent : root.warningColor
     tooltipText: root.tooltipText()
-    onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton) root.cycleBarMode()
-      else if (buttonCode === Qt.MiddleButton) root.launchBtop()
-      else root.toggle()
-    }
+    onPressed: function(buttonCode) { root.barPressed(buttonCode) }
+  }
+
+  BarIconButton {
+    id: iconButton
+    anchors.fill: parent
+    visible: root.iconOnly
+    bar: root.bar
+    text: root.heroGlyph
+    active: root.warning || root.critical
+    activeColor: root.critical ? root.urgent : root.warningColor
+    tooltipText: root.tooltipText()
+    onPressed: function(buttonCode) { root.barPressed(buttonCode) }
   }
 
   KeyboardPanel {
     id: panel
-    anchorItem: button
+    anchorItem: root.iconOnly ? iconButton : button
     owner: root
     bar: root.bar
     open: root.opened

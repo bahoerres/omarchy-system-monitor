@@ -48,7 +48,7 @@ omarchy restart shell
 | Action | Result |
 | --- | --- |
 | Left-click | Open or close the dashboard |
-| Right-click | Cycle `Adaptive` → `CPU` → `Memory` → `Both` (`GPU` is added to the cycle automatically when a card publishes a utilization counter) |
+| Right-click | Cycle `Adaptive` → `CPU` → `Memory` → `Both` → `Icon` (`GPU` is added to the cycle automatically when a card publishes a utilization counter) |
 | Middle-click | Open `btop` |
 | `R` while open | Refresh metrics now |
 | `B` while open | Open `btop` |
@@ -108,7 +108,7 @@ Open **Setup → Plugins → System Monitor** to change these values:
 
 | Setting | Default | Range or behavior |
 | --- | ---: | --- |
-| Bar display | Adaptive | `Adaptive`, `CPU`, `Memory`, `GPU`, or `Both` |
+| Bar display | Adaptive | `Adaptive`, `CPU`, `Memory`, `GPU`, `Both`, or `Icon` (glyph only; still tints at warning/critical) |
 | Closed refresh | 5 s | 2–60 seconds |
 | Open refresh | 2 s | 1–10 seconds |
 | Warning threshold | 80% | 50–95% |

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.2.0 - 2026-08-29
+
+- Add an `Icon` bar display mode: the plugin glyph alone, no live text, for
+  bars that should stay quiet. It still tints at warning/critical pressure and
+  keeps the tooltip and dashboard; right-click cycling includes it
+
 ## 1.1.1 - 2026-08-26
 
 - Fix GPU temperature discovery on the `xe` driver (Intel Arc, Meteor Lake,

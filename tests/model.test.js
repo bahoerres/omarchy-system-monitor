@@ -117,13 +117,14 @@ test("manifest describes a public bar widget with configurable thresholds", () =
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"))
   assert.equal(manifest.schemaVersion, 1)
   assert.equal(manifest.id, "harshith.system-monitor")
-  assert.equal(manifest.version, "1.1.1")
+  assert.equal(manifest.version, "1.2.0")
   assert.equal(manifest.license, "MIT")
   assert.equal(manifest.homepage, "https://github.com/Harshith292002/omarchy-system-monitor")
   assert.equal(manifest.barWidget.defaultSection, "right")
   assert.ok(manifest.barWidget.schema.some((entry) => entry.key === "warningPercent"))
   const barMode = manifest.barWidget.schema.find((entry) => entry.key === "barMode")
   assert.ok(barMode.options.includes("GPU"))
+  assert.ok(barMode.options.includes("Icon"))
 })
 
 test("panel exposes bar cycling, btop launch, and live hostname title", () => {
