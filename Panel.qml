@@ -289,8 +289,8 @@ Panel {
   }
 
   visible: true
-  implicitWidth: button.implicitWidth
-  implicitHeight: button.implicitHeight
+  implicitWidth: iconOnly ? iconButton.implicitWidth : button.implicitWidth
+  implicitHeight: iconOnly ? iconButton.implicitHeight : button.implicitHeight
 
   onOpenedChanged: {
     if (opened) {
